@@ -54,7 +54,7 @@ def spoof_dns(t_ip)
       #check if query
       if dns_hdr_flag == '10'
         puts pkt.payload
-        domain_name = extract_domain(pkt.payload[12..-1])
+        domain_name = extract_domain(pkt.payload[13..-1])
 
         puts "Domain name is: #{domain_name}"
 
@@ -72,52 +72,13 @@ end
 
 def extract_domain(q_name)
   #take q name and extract all subdomains
-  domain_name = ""
-=begin
-  puts "length: #{q_name.length}"
-  puts q_name[0].unpack('U*')
-  puts q_name[1]
-  puts q_name[2]
-  puts q_name[3]
-  puts q_name[4].unpack('U*')
-  puts q_name[5]
-  puts q_name[6]
-  puts q_name[7]
-  puts q_name[8]
-  puts q_name[9]
-  puts q_name[10]
-  puts q_name[11]
-  puts q_name[12]
-  puts q_name[13]
-  puts q_name[14]
-  puts q_name[15]
-  puts q_name[16]
-  puts q_name[17]
-  puts q_name[18]
-  puts q_name[19]
-  puts q_name[20]
-  puts q_name[21]
-  puts q_name[22]
-  puts q_name[23]
-  puts q_name[24]
-  puts q_name[25]
-  puts q_name[26].unpack('U*')
-  puts q_name[27]
-  puts q_name[28]
-  puts q_name[29]
-  puts q_name[30].unpack('U*')
-  puts q_name[31]
-  puts q_name[32]
-=end
 
   domain_name = ""
   n = 0
   loop {
-    puts "#{q_name[n].unpack('U*')} + #{q_name[n].class}"
     if q_name[n].unpack('H*') == ["00"]
       return domain_name
-    elsif q_name[n].is_a? Integer
-      puts "int"
+    elsif !q_name[n].match(/^[[:alpha:]]$/)
       domain_name += '.'
       n += 1
     else
@@ -125,24 +86,6 @@ def extract_domain(q_name)
       n += 1
     end 
   }
-=begin
-  puts "starting extract domain name: #{q_name}" 
-  name = ""
-  loop {
-    puts "qname: #{q_name[0].unpack('n')}"
-    len = q_name[0].to_i
-    if len == 0
-      name = name[0, name.length - 1]
-      return name
-    elsif len > 0
-        len > 0
-      name += q_name[1, len] + "."
-      q_name = q_name[len + 1..-1]
-    else len < 0 # should never be negative
-      return nil
-    end
-  }
-=end
 end
 
 def send_dns_response(orig_pkt, name)
